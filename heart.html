@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Galaxy to Heart to I LOVE U</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #010003;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #instruction {
+            position: absolute;
+            bottom: 30px;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            letter-spacing: 2px;
+            pointer-events: none;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            animation: blink 1s infinite;
+            z-index: 10;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="instruction">CLICK TO TRANSFORM</div>
+    <canvas id="heartCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('heartCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+
+        const particles = [];
+        const particleCount = 18000; 
+        
+        // Trạng thái: 0 = Galaxy, 1 = Heart, 2 = I LOVE U
+        let currentState = 0; 
+
+        const focalLength = 650;
+
+        // Hàm tạo bản đồ pixel cho chữ "I LOVE U"
+        function createTextPoints() {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = 600;
+            tempCanvas.height = 150;
+            
+            tempCtx.fillStyle = 'black';
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            
+            // Vẽ chữ
+            tempCtx.fillStyle = 'white';
+            tempCtx.font = 'bold 90px Arial, sans-serif';
+            tempCtx.textAlign = 'center';
+            tempCtx.textBaseline = 'middle';
+            tempCtx.fillText('I LOVE U', tempCanvas.width / 2, tempCanvas.height / 2);
+            
+            const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const points = [];
+            
+            // Lọc ra các pixel màu trắng (nơi có chữ)
+            for (let y = 0; y < tempCanvas.height; y += 2) {
+                for (let x = 0; x < tempCanvas.width; x += 2) {
+                    const index = (y * tempCanvas.width + x) * 4;
+                    if (imgData.data[index] > 128) {
+                        points.push({
+                            x: (x - tempCanvas.width / 2) * 1.5,
+                            y: (y - tempCanvas.height / 2) * 1.5
+                        });
+                    }
+                }
+            }
+            return points;
+        }
+
+        const textPoints = createTextPoints();
+
+        class Particle {
+            constructor(index) {
+                // --- Trạng thái 0: NGÂN HÀ BAN ĐẦU ---
+                const arms = 2; 
+                const armIndex = Math.floor(Math.random() * arms);
+                const distance = Math.pow(Math.random(), 1.8) * 4.5; 
+                const angle = distance * 1.8 + (armIndex * (Math.PI * 2 / arms)) + (Math.random() - 0.5) * 0.35;
+                const thickness = (4.5 - distance) * 0.15; 
+                
+                const galaxyScale = width < 600 ? 180 : 380;
+                this.x3D = Math.cos(angle) * distance * galaxyScale;
+                this.y3D = (Math.random() - 0.5) * thickness * galaxyScale;
+                this.z3D = Math.sin(angle) * distance * galaxyScale;
+
+                this.orbitSpeed = Math.random() * 0.015 + 0.01;
+                this.orbitRadius = Math.sqrt(this.x3D * this.x3D + this.z3D * this.z3D);
+                this.orbitAngle = Math.atan2(this.z3D, this.x3D);
+
+                // --- Trạng thái 1: TRÁI TIM 3D MỤC TIÊU ---
+                let found = false;
+                let hx, hy, hz;
+                while (!found) {
+                    hx = (Math.random() - 0.5) * 3; 
+                    hy = (Math.random() - 0.5) * 3; 
+                    hz = (Math.random() - 0.5) * 3; 
+                    
+                    let a = hx*hx + 2.25*hy*hy + hz*hz - 1;
+                    let val = a*a*a - hx*hx*hz*hz*hz - 0.1125*hy*hy*hz*hz*hz;
+                    
+                    if (val <= 0 && val >= -0.2) {
+                        found = true;
+                    }
+                }
+                this.heartX = hx;
+                this.heartY = -hz; 
+                this.heartZ = hy;
+
+                // --- Trạng thái 2: CHỮ "I LOVE U" MỤC TIÊU ---
+                // Phân phối đều các hạt vào các điểm pixel của chữ
+                const pt = textPoints[index % textPoints.length];
+                this.textX = pt.x + (Math.random() - 0.5) * 5;
+                this.textY = pt.y + (Math.random() - 0.5) * 5;
+                this.textZ = (Math.random() - 0.5) * 40; // Tạo độ dày nhẹ 3D cho chữ
+
+                // Thuộc tính hiển thị
+                this.size = Math.random() * 1.4 + 0.2; 
+                const colors = ['#ff2a6d', '#ff71ce', '#05ffa1', '#00f5ff', '#ffffff', '#ffffff'];
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+                
+                this.screenX = 0;
+                this.screenY = 0;
+                this.screenScale = 1;
+                this.depth = 0; 
+            }
+
+            update(pulse, currentAngle) {
+                let targetX, targetY, targetZ;
+
+                if (currentState === 1) {
+                    // CHUYỂN THÀNH TRÁI TIM
+                    const baseScale = width < 600 ? 200 : 420;
+                    const scale = baseScale * pulse;
+
+                    targetX = this.heartX * scale;
+                    targetY = this.heartY * scale;
+                    targetZ = this.heartZ * scale;
+
+                    this.x3D += (targetX - this.x3D) * 0.18;
+                    this.y3D += (targetY - this.y3D) * 0.18;
+                    this.z3D += (targetZ - this.z3D) * 0.18;
+
+                } else if (currentState === 2) {
+                    // CHUYỂN THÀNH CHỮ "I LOVE U"
+                    targetX = this.textX;
+                    targetY = this.textY;
+                    targetZ = this.textZ;
+
+                    // Tăng tốc độ chuyển đổi để chữ nhanh chóng định hình rõ nét
+                    this.x3D += (targetX - this.x3D) * 0.2;
+                    this.y3D += (targetY - this.y3D) * 0.2;
+                    this.z3D += (targetZ - this.z3D) * 0.2;
+
+                } else {
+                    // TRẠNG THÁI NGÂN HÀ CHẠY VÒNG TRÒN
+                    this.orbitAngle += this.orbitSpeed;
+                    targetX = Math.cos(this.orbitAngle) * this.orbitRadius;
+                    targetZ = Math.sin(this.orbitAngle) * this.orbitRadius;
+                    
+                    this.x3D += (targetX - this.x3D) * 0.1;
+                    this.z3D += (targetZ - this.z3D) * 0.1;
+                }
+
+                // --- TOÁN HỌC XOAY 3D ---
+                let cosA = Math.cos(currentAngle);
+                let sinA = Math.sin(currentAngle);
+                
+                // Khi ở trạng thái chữ (2), giảm bớt góc xoay trục Y để dễ đọc chữ hơn
+                let actualAngle = currentState === 2 ? currentAngle * 0.15 : currentAngle;
+                let cosX = Math.cos(actualAngle);
+                let sinX = Math.sin(actualAngle);
+
+                let rotX = this.x3D * cosX - this.z3D * sinX;
+                let rotZ = this.x3D * sinX + this.z3D * cosX;
+                
+                // Độ nghiêng phối cảnh
+                let tilt = currentState === 2 ? 0.1 : 0.55; 
+                let cosT = Math.cos(tilt);
+                let sinT = Math.sin(tilt);
+                let rotY = this.y3D * cosT - rotZ * sinT;
+                let finalZ = this.y3D * sinT + rotZ * cosT;
+
+                this.depth = finalZ;
+
+                // --- PHỐI CẢNH CHIỀU SÂU (PERSPECTIVE) ---
+                let offsetZ = 450; 
+                this.screenScale = focalLength / (focalLength + finalZ + offsetZ);
+                
+                if(this.screenScale < 0) this.screenScale = 0.001; 
+
+                this.screenX = width / 2 + rotX * this.screenScale;
+                this.screenY = height / 2 + rotY * this.screenScale;
+            }
+
+            draw() {
+                ctx.globalAlpha = Math.min(1, Math.max(0.15, this.screenScale * 1.2));
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                let drawSize = this.size * this.screenScale;
+                ctx.arc(this.screenX, this.screenY, Math.max(0.05, drawSize), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Khởi tạo các hạt
+        for (let i = 0; i < particleCount; i++) {
+            particles.push(new Particle(i));
+        }
+
+        let time = 0; 
+        let rotationAngle = 0; 
+
+        function animate() {
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = 'rgba(2, 0, 5, 0.14)'; 
+            ctx.fillRect(0, 0, width, height);
+
+            time += 0.12;           
+            rotationAngle += 0.035; 
+            
+            let pulse = 1 + Math.pow(Math.abs(Math.sin(time)), 6) * 0.07;
+
+            particles.forEach(p => p.update(pulse, rotationAngle));
+            particles.sort((a, b) => b.depth - a.depth);
+            particles.forEach(p => p.draw());
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+        function toggleState() {
+            currentState = (currentState + 1) % 3;
+        }
+
+        // Các bộ lắng nghe tương tác
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'd' || e.key === 'D' || e.key === ' ') {
+                toggleState();
+            }
+        });
+
+        window.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            toggleState();
+        });
+
+        window.addEventListener('click', () => {
+            toggleState();
+        });
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>
